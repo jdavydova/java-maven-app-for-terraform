@@ -29,7 +29,7 @@ pipeline {
         script {
           echo 'building docker image...'
           buildImage(env.IMAGE_NAME)
-          dockerLogin()
+          dockerLogin('docker-hub-repo')
           dockerPush(env.IMAGE_NAME)
         }
       }
