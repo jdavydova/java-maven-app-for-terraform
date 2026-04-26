@@ -20,5 +20,5 @@ variable instance_type {
   default = "t2.micro"
 }
 variable region {
-  default = "eu-north-1"
+  default = "eu-north-1a"
 }
