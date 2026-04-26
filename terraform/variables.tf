@@ -5,7 +5,7 @@ variable subnet_cidr_block {
   default = "10.0.10.0/24"
 }
 variable avail_zone {
-  default = "eu-north-1"
+  default = "eu-north-1a"
 }
 variable env_prefix {
   default = "dev"
@@ -20,5 +20,5 @@ variable instance_type {
   default = "t2.micro"
 }
 variable region {
-  default = "eu-north-1a"
+  default = "eu-north-1"
 }
