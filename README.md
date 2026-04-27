@@ -1,175 +1,218 @@
-# 🚀 EKS Cluster Autoscaling Setup
+# 🚀 Complete CI/CD Pipeline with Jenkins, Docker & Terraform
 
-This guide explains how to configure **Kubernetes Cluster Autoscaler** with **AWS Auto Scaling Groups (ASG)** in an Amazon EKS cluster.
+## 📌 Project Overview
 
----
+This project demonstrates a complete DevOps pipeline that:
 
-## 📌 Overview
-
-Amazon EKS does **not automatically scale EC2 worker nodes**.
-
-To enable autoscaling, you must:
-
-- Use an **Auto Scaling Group (ASG)** for EC2 instances
-- Deploy the **Kubernetes Cluster Autoscaler**
-- Configure **IAM + OIDC trust** between AWS and Kubernetes
+- Builds a Java Maven application
+- Creates a Docker image
+- Pushes the image to Docker Hub
+- Provisions AWS infrastructure using Terraform
+- Deploys the application to an EC2 instance using Docker Compose
 
 ---
 
-## 🏗️ 1. Create VPC Infrastructure
+## 🏗️ Architecture
 
-Deploy the required networking stack using the AWS CloudFormation template:
-
-https://s3.us-west-2.amazonaws.com/amazon-eks/cloudformation/2020-10-29/amazon-eks-vpc-private-subnets.yaml
-
----
-
-## ⚙️ 2. Understand Auto Scaling Groups (ASG)
-
-An Auto Scaling Group:
-
-- Groups EC2 instances logically
-- Defines scaling boundaries:
-  - **Min size** → minimum number of nodes
-  - **Max size** → maximum number of nodes
-
-> ⚠️ Important  
-> ASG **does not automatically scale based on Kubernetes workloads**
+```
+Jenkins → Maven Build → Docker Build → Docker Hub
+        → Terraform → AWS EC2
+        → SSH → Docker Compose Deployment
+```
 
 ---
 
-## 🤔 3. Why Autoscaler Is Required
+## ⚙️ Technologies Used
 
-EKS alone does not manage scaling.
-
-You must deploy the **Cluster Autoscaler**, which:
-
-- Watches for unscheduled pods
-- Increases node count when needed
-- Decreases node count when underutilized
-
----
-
-## 🔐 4. Configure OIDC Trust (AWS ↔ Kubernetes)
-
-To allow Kubernetes to control AWS resources securely, configure **OIDC (OpenID Connect)**.
-
-### What is OIDC?
-
-- Identity layer on top of OAuth 2.0
-- Allows Kubernetes ServiceAccounts to assume IAM roles
+- Jenkins (CI/CD)
+- Maven (Build tool)
+- Docker & Docker Hub
+- Terraform (Infrastructure as Code)
+- AWS (EC2, VPC, Networking)
+- Docker Compose
 
 ---
 
-### 🔍 4.1 Get OIDC Provider URL
+## 🔄 Pipeline Stages
+
+### 1️⃣ Checkout Code
+Jenkins pulls:
+- Application repo
+- Shared library (jenkins-shared-library)
+
+---
+
+### 2️⃣ Build Application
 
 ```bash
-aws eks describe-cluster   --name <cluster-name>   --query "cluster.identity.oidc.issuer"   --output text
+mvn package
+```
+
+Produces:
+```
+target/java-maven-app-1.0-SNAPSHOT.jar
 ```
 
 ---
 
-### ➕ 4.2 Create IAM OIDC Identity Provider
+### 3️⃣ Build Docker Image
 
-1. Go to **AWS Console → IAM → Identity Providers**
-2. Click **Add provider**
-3. Select:
-   - **Type**: OpenID Connect
-4. Enter:
-   - **Provider URL** → (EKS OIDC URL)
-   - **Audience** → `sts.amazonaws.com`
-5. Save
+```bash
+docker build -t juliadavydova/demo-app:java-maven-2.0 .
+```
 
----
-
-## 📜 5. Create IAM Policy
-
-Create a policy named:
-
-ClusterAutoscalerPolicy
-
-### Policy JSON
-
-```json
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Action": [
-        "autoscaling:DescribeAutoScalingGroups",
-        "autoscaling:DescribeAutoScalingInstances",
-        "autoscaling:DescribeLaunchConfigurations",
-        "autoscaling:DescribeScalingActivities",
-        "autoscaling:SetDesiredCapacity",
-        "autoscaling:TerminateInstanceInAutoScalingGroup",
-        "ec2:DescribeInstanceTypes",
-        "ec2:DescribeLaunchTemplateVersions"
-      ],
-      "Effect": "Allow",
-      "Resource": "*"
-    }
-  ]
-}
+Base image:
+```
+amazoncorretto:17-alpine-jdk
 ```
 
 ---
 
-## 👤 6. Create IAM Role for Autoscaler
+### 4️⃣ Push to Docker Hub
 
-1. Go to **IAM → Roles → Create role**
-2. Select:
-   - **Web identity**
-3. Choose:
-   - Your OIDC provider
-4. Set:
-   - Audience → `sts.amazonaws.com`
-5. Attach:
-   - `ClusterAutoscalerPolicy`
-
----
-
-## ☸️ 7. Create Kubernetes ServiceAccount
-
-Bind the IAM role to Kubernetes using annotations:
-
-```yaml
-apiVersion: v1
-kind: ServiceAccount
-metadata:
-  name: cluster-autoscaler
-  namespace: kube-system
-  annotations:
-    eks.amazonaws.com/role-arn: <IAM-role-arn>
+```bash
+docker login
+docker push juliadavydova/demo-app:java-maven-2.0
 ```
 
 ---
 
-## 🚀 8. Deploy Cluster Autoscaler
+### 5️⃣ Provision Infrastructure (Terraform)
 
-Deploy the Cluster Autoscaler to your cluster.
+```bash
+terraform init
+terraform apply --auto-approve
+```
 
-It will:
+Creates:
+- VPC
+- Subnet
+- Internet Gateway
+- Route Table
+- Security Group
+- EC2 Instance
 
-- Monitor pod scheduling
-- Increase nodes when pods cannot be scheduled
-- Decrease nodes when underutilized
+Example:
+```
+ec2-public_ip = "16.170.237.254"
+```
+
+⚠️ Changing `user_data` recreates EC2
 
 ---
 
-## 🔑 Summary
+### 6️⃣ Deploy Application to EC2
 
-| Component              | Responsibility                          |
-|----------------------|------------------------------------------|
-| **ASG**              | Defines EC2 scaling limits               |
-| **Cluster Autoscaler** | Makes scaling decisions                 |
-| **OIDC + IAM**       | Enables secure AWS access from Kubernetes |
+```bash
+scp server-cmds.sh ec2-user@<EC2-IP>:/home/ec2-user
+scp docker-compose.yaml ec2-user@<EC2-IP>:/home/ec2-user
+
+ssh ec2-user@<EC2-IP> bash ./server-cmds.sh <IMAGE> <USER> <PASSWORD>
+```
 
 ---
 
-## 🎯 Result
+## 📦 Deployment Script
 
-With everything configured:
+```bash
+#!/usr/bin/env bash
 
-✅ Pods trigger scaling automatically  
-✅ EC2 instances scale up/down dynamically  
-✅ Infrastructure cost is optimized  
+export IMAGE=$1
+export DOCKER_USER=$2
+export DOCKER_PWD=$3
+
+echo $DOCKER_PWD | docker login -u $DOCKER_USER --password-stdin
+
+docker compose -f docker-compose.yaml up -d
+
+echo "success"
+```
+
+---
+
+## 🐳 Docker Compose
+
+- Pulls application image
+- Pulls PostgreSQL image
+- Creates network
+- Starts containers
+
+Example:
+```
+Container java-maven-app Started
+Container postgres Started
+```
+
+---
+
+## 🖥️ EC2 Setup (Terraform user_data)
+
+```bash
+#!/bin/bash
+sudo yum update -y
+sudo yum install -y docker
+sudo systemctl start docker
+sudo systemctl enable docker
+sudo usermod -aG docker ec2-user
+
+sudo yum install -y docker-compose-plugin
+```
+
+---
+
+## 🔐 Jenkins Credentials
+
+| ID | Purpose |
+|----|--------|
+| github-credentials | GitHub access |
+| docker-hub-repo | Docker login |
+| jenkins-aws_access_key_id | AWS access |
+| jenkins-aws_secret_access_key | AWS secret |
+| ec2-user | SSH key |
+
+---
+
+## ⚠️ Important Notes
+
+### Terraform
+```
+terraform output -raw ec2-public_ip
+```
+
+### Docker Compose Warning
+Remove deprecated:
+```
+version:
+```
+
+### Jenkins Security
+Avoid exposing secrets via Groovy interpolation.
+
+---
+
+## ✅ Final Result
+
+```
+Finished: SUCCESS
+```
+
+Application:
+```
+http://16.170.237.254:8080
+```
+
+---
+
+## 🎯 Summary
+
+Automates:
+```
+Build → Package → Containerize → Push → Provision → Deploy
+```
+
+---
+
+## 📎 Repository
+
+- App: https://github.com/jdavydova/java-maven-app-for-terraform
+- Shared Library: https://github.com/jdavydova/jenkins-shared-library
