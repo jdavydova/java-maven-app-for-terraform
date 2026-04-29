@@ -216,3 +216,9 @@ Build → Package → Containerize → Push → Provision → Deploy
 
 - App: https://github.com/jdavydova/java-maven-app-for-terraform
 - Shared Library: https://github.com/jdavydova/jenkins-shared-library
+
+<img width="1421" height="489" alt="Screenshot 2026-04-29 at 11 56 11 AM" src="https://github.com/user-attachments/assets/b78032a8-b747-44a4-9845-e415d88c5fc5" />
+
+<img width="1288" height="780" alt="Screenshot 2026-04-29 at 11 56 41 AM" src="https://github.com/user-attachments/assets/db9d6426-876e-4381-abb0-042c51498287" />
+
+
